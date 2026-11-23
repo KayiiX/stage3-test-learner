@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>kfupm_test_learner</name>
+  <version>1.0.0</version>
+  <description>KFUPM F1TENTH Stage 3 test controller (learner)</description>
+  <maintainer email="294115568+KayiiX@users.noreply.github.com">KFUPM F1TENTH organizers</maintainer>
+  <license>MIT</license>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>ackermann_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
