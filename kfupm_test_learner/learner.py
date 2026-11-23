@@ -18,7 +18,7 @@ WHEELBASE = 0.33
 LAP_FILE = "lap.csv"
 
 
-def racing_line(points, v_max=5.5, a_lat=3.2, a_brake=3.5):
+def racing_line(points, v_max=4.8, a_lat=2.2, a_brake=2.5):
     """Resample the recorded lap every 0.1 m, smooth it, and give each point a speed."""
     p = np.asarray(points, dtype=float)
     seg = np.linalg.norm(np.diff(p, axis=0, append=p[:1]), axis=1)
@@ -47,6 +47,7 @@ class Learner(Node):
         self.mode = os.environ.get("F1TENTH_MODE", "race")
         self.data = data_dir_override or os.environ.get("F1TENTH_DATA_DIR", "")
         self.pose, self.yaw, self.idx = None, 0.0, None
+        self.front, self.side_steer = 10.0, None   # from LiDAR: free distance ahead, escape steering
         self.racing, self.laps, self.rec, self.saved = False, 0, [], False
         self.line = self.speed = None
         if self.mode == "practice" and self.data:
@@ -94,14 +95,26 @@ class Learner(Node):
             w = (self.idx + np.arange(0, 80)) % n
             self.idx = int(w[np.argmin(np.linalg.norm(self.line[w] - pos, axis=1))])
         v = float(self.speed[self.idx])
-        target = self.line[(self.idx + int((0.8 + 0.18 * v) / 0.1)) % n]
+        # never faster than the car can stop before the wall straight ahead (LiDAR)
+        v = min(v, max(1.0, math.sqrt(2 * 2.5 * max(self.front - 0.5, 0.0))))
+        target = self.line[(self.idx + int((0.6 + 0.12 * v) / 0.1)) % n]
         dx, dy = target - pos
         ly = -math.sin(self.yaw) * dx + math.cos(self.yaw) * dy
         steer = math.atan(2 * WHEELBASE * ly / max(dx * dx + dy * dy, 1e-6))
+        if self.side_steer is not None:      # too close to a side wall: steer away first
+            steer, v = self.side_steer, min(v, 2.0)
         self.send(float(np.clip(steer, -MAX_STEER, MAX_STEER)), v)
 
     def on_scan(self, scan):
         steer, speed, ahead = gap_command(scan, v_max=4.0 if self.mode == "practice" else 4.5)
+        r = np.nan_to_num(np.asarray(scan.ranges, dtype=float), nan=0.0, posinf=scan.range_max)
+        ang = scan.angle_min + np.arange(len(r)) * scan.angle_increment
+        self.front = ahead
+        left = r[(ang > math.radians(30)) & (ang < math.radians(100))]
+        right = r[(ang < -math.radians(30)) & (ang > -math.radians(100))]
+        lmin = float(left.min()) if left.size else 10.0
+        rmin = float(right.min()) if right.size else 10.0
+        self.side_steer = (-0.25 if lmin < rmin else 0.25) if min(lmin, rmin) < 0.28 else None
         if self.line is None:
             self.send(steer, speed)
 
